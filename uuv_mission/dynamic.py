@@ -1,6 +1,7 @@
 from __future__ import annotations
 from dataclasses import dataclass
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from .terrain import generate_reference_and_limits
 
@@ -74,9 +75,22 @@ class Mission:
         return cls(reference, cave_height, cave_depth)
 
     @classmethod
-    def from_csv(cls, file_name: str):
-        # You are required to implement this method
-        pass
+    def from_csv(cls, file_name: str) -> Mission:
+        """Create a Mission from a CSV file.
+
+        Args:
+            file_name: Path to a CSV file with columns 'reference',
+                'cave_height' and 'cave_depth'.
+
+        Returns:
+            A Mission instance holding the three columns as NumPy arrays.
+        """
+        data = pd.read_csv(file_name)
+        return cls(
+            reference=data["reference"].to_numpy(),
+            cave_height=data["cave_height"].to_numpy(),
+            cave_depth=data["cave_depth"].to_numpy(),
+        )
 
 
 class ClosedLoop:
@@ -85,7 +99,11 @@ class ClosedLoop:
         self.controller = controller
 
     def simulate(self,  mission: Mission, disturbances: np.ndarray) -> Trajectory:
+        """Simulate the closed loop and return the trajectory.
 
+        The controller (uuv_mission/control.py) is used only through
+        reset() and compute_action(error) -> float, where e[t] = r[t] - y[t].
+        """
         T = len(mission.reference)
         if len(disturbances) < T:
             raise ValueError("Disturbances must be at least as long as mission duration")
@@ -93,11 +111,18 @@ class ClosedLoop:
         positions = np.zeros((T, 2))
         actions = np.zeros(T)
         self.plant.reset_state()
+        # Controller interface: clear stored previous error so repeated
+        # runs with the same controller object all start from e[-1] = 0
+        self.controller.reset()
 
         for t in range(T):
             positions[t] = self.plant.get_position()
             observation_t = self.plant.get_depth()
             # Call your controller here
+            # The error (sign convention e = r - y) is computed here and
+            # passed to the controller, which returns the control action u[t]
+            error_t = mission.reference[t] - observation_t
+            actions[t] = self.controller.compute_action(error_t)
             self.plant.transition(actions[t], disturbances[t])
 
         return Trajectory(positions)
