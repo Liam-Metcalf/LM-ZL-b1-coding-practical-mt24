@@ -118,7 +118,6 @@ class ClosedLoop:
         for t in range(T):
             positions[t] = self.plant.get_position()
             observation_t = self.plant.get_depth()
-            # Call your controller here
             # The error (sign convention e = r - y) is computed here and
             # passed to the controller, which returns the control action u[t]
             error_t = mission.reference[t] - observation_t
